@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 
 def parse_csv(file_path):
     """
@@ -15,8 +14,10 @@ def parse_csv(file_path):
     # Read the CSV file into a DataFrame
     df = pd.read_csv(file_path)
     
-    columns_to_drop = ['JobLevel', 'Education', 'EducationField', 'Gender']
-    df = df.drop(columns=columns_to_drop)
+    columns_to_drop_1 = ['EmployeeCount', 'Over18', 'StandardHours', 'EmployeeNumber']
+    columns_to_drop_2 = ['MonthlyIncome', 'TotalWorkingYears', 'YearsInCurrentRole', 'YearsWithCurrManager']
+    df = df.drop(columns=columns_to_drop_1)
+    df = df.drop(columns=columns_to_drop_2)
 
     # Separate features and target variable
     X = df.drop('Attrition', axis=1)
@@ -29,10 +30,8 @@ def parse_csv(file_path):
     # One-hot encode categorical variables
     X_encoded = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
 
-    # Normalize numerical variables
-    scaler = StandardScaler()
-    X_encoded[numerical_cols] = scaler.fit_transform(X_encoded[numerical_cols])
-
+    # Doesn't normalize. Leave normalization until after splitting.
+    
     # Encode the target variable
     y_encoded = y.map({'Yes': 1, 'No': 0})
 

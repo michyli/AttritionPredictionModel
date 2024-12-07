@@ -10,14 +10,16 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler
 
 # Parse the data
-X, y = parse.parse_csv('../Employee_Attrition.csv')
+X, y = parse.parse_csv('../EmployeeAttritionAllData.csv')
 
 # Train:Validation:Test = 80:20:10
 X_train_val, X_test, y_train_val, y_test = train_test_split(
     X, y, test_size=0.10, stratify=y, random_state=42
 )
+
 X_train, X_val, y_train, y_val = train_test_split(
     X_train_val,
     y_train_val,
@@ -25,6 +27,13 @@ X_train, X_val, y_train, y_val = train_test_split(
     stratify=y_train_val,
     random_state=42,
 )
+
+scaler = StandardScaler()
+numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+X_train_val[numerical_cols] = scaler.fit_transform(X_train_val[numerical_cols])
+X_test[numerical_cols] = scaler.fit_transform(X_test[numerical_cols])
+X_train[numerical_cols] = scaler.fit_transform(X_train[numerical_cols])
+X_val[numerical_cols] = scaler.fit_transform(X_val[numerical_cols])
 
 # Apply SMOTE to balance the training data
 smote = SMOTE(random_state=42)
