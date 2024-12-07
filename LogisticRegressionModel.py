@@ -13,8 +13,13 @@ from sklearn.preprocessing import PolynomialFeatures
 from imblearn.over_sampling import SMOTE
 rng_seed = 42
 
-#data = pd.read_csv("EmployeeAttritionAllData.csv")         ### Unfiltered data, not using for now
-data = pd.read_csv("EmployeeAttrition.csv")
+data = pd.read_csv("EmployeeAttritionAllData.csv")         ### Unfiltered data, not using for now
+columns_to_drop = ['EmployeeCount', 'Over18', 'StandardHours', 'EmployeeNumber']
+data = data.drop(columns=columns_to_drop)
+
+#data = pd.read_csv("EmployeeAttrition.csv")
+
+
 ### checking the data to make sure all data are valid to use for training
 #print(data.head()) 
 #print(data.info())
@@ -51,7 +56,6 @@ simple_yhat = simple_model.predict_proba(X_test)[:, 1]
 
 ### Evaluate model with cross validation
 acc_norm = np.mean(cross_val_score(simple_model, X_train, y_train, scoring='accuracy', cv=3))
-
 
 
 ### Lasso Regularized Logistic Regression
@@ -92,30 +96,11 @@ lasso_test = accuracy_score(y_test, yhat)
 print(f"Accuracy for Regularized Model: {lasso_test}")
 
 
-###Poly Features
-poly = PolynomialFeatures(degree=2, interaction_only=True, include_bias=False)
-X_train_poly = poly.fit_transform(X_train)
-X_test_poly = poly.transform(X_test)
-
-
-# Train a logistic regression model on the new dataset
-poly_model = LogisticRegression(random_state=42)
-poly_model.fit(X_train_poly, y_train)
-poly_yhat = poly_model.predict(X_test_poly)
-poly_test = accuracy_score(y_test, poly_yhat)
-print(f"Accuracy for Poly Model: {poly_test}")
-
-
 ### Testing / Accuracy for 50% threshold
 simple_ypred = (simple_yhat > 0.5).astype(int)
 accuracy = accuracy_score(y_test, simple_ypred)
 print(f"Unregularized Accuracy: {accuracy}")
 
-'''
-#Classification Report
-print("Classification Report:")
-print(classification_report(y_test, yhat))
-'''
 
 fpr, tpr, th = roc_curve(y_test, simple_yhat) 
 auc = roc_auc_score(y_test, simple_yhat)
@@ -130,3 +115,7 @@ plt.legend(loc="lower right")
 plt.show()
 
 print("AUC-ROC Score:", auc)
+
+#Classification Report
+print("Classification Report:")
+print(classification_report(y_test, yhat))
