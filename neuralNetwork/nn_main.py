@@ -1,90 +1,107 @@
-import pandas as pd
-import random
-import numpy as np
-from micrograd.engine import Value
-from micrograd.nn import MLP
-from parse import data2df, transform_columns
+import parse
+from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    roc_auc_score,
+    roc_curve,
+)
+import matplotlib.pyplot as plt
+from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import StandardScaler
 
-# Read and transform data
-df = data2df('../Employee_Attrition.csv')
-df = transform_columns(df)
+# Parse the data
+X, y = parse.parse_csv('../EmployeeAttritionAllData.csv')
 
-if df is None:
-    raise ValueError("Data loading failed.")
+# Train:Validation:Test = 80:20:10
+X_train_val, X_test, y_train_val, y_test = train_test_split(
+    X, y, test_size=0.10, stratify=y, random_state=42
+)
 
-n_train = int(0.8 * len(df))
-train_data = df.iloc[:n_train]
-test_data = df.iloc[n_train:]
+X_train, X_val, y_train, y_val = train_test_split(
+    X_train_val,
+    y_train_val,
+    test_size=0.2222,
+    stratify=y_train_val,
+    random_state=42,
+)
 
-# Extract inputs and outputs
-X_train = train_data.drop('Attrition', axis=1)
-y_train = train_data['Attrition'].astype(float).values
+scaler = StandardScaler()
+numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+X_train_val[numerical_cols] = scaler.fit_transform(X_train_val[numerical_cols])
+X_test[numerical_cols] = scaler.fit_transform(X_test[numerical_cols])
+X_train[numerical_cols] = scaler.fit_transform(X_train[numerical_cols])
+X_val[numerical_cols] = scaler.fit_transform(X_val[numerical_cols])
 
-X_test = test_data.drop('Attrition', axis=1)
-y_test = test_data['Attrition'].astype(float).values
+# Apply SMOTE to balance the training data
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
-# Identify numerical columns (excluding one-hot encoded columns)
-numerical_columns = ['Age', 'DistanceFromHome', 'Education', 'HourlyRate',
-                     'JobLevel', 'JobSatisfaction', 'NumCompaniesWorked',
-                     'TotalWorkingYears', 'WorkLifeBalance', 'YearsAtCompany',
-                     'YearsSinceLastPromotion']
+# Initialize the MLPClassifier
+mlp = MLPClassifier(
+    hidden_layer_sizes=(512, 512, 512),
+    activation='logistic',
+    solver='adam',
+    max_iter=3000,
+    random_state=42,
+    early_stopping=True
+)
 
-# Get indices of numerical columns in X_train
-numerical_indices = [X_train.columns.get_loc(col) for col in numerical_columns]
+# Train the model on the resampled training data
+mlp.fit(X_train_resampled, y_train_resampled)
 
-# Convert X_train and X_test to numpy arrays
-X_train_np = X_train.values.astype(float)
-X_test_np = X_test.values.astype(float)
+# Predict probabilities on the validation set
+y_val_pred_proba = mlp.predict_proba(X_val)[:, 1]
 
-# Normalize only numerical columns
-mins = X_train_np[:, numerical_indices].min(axis=0)
-maxs = X_train_np[:, numerical_indices].max(axis=0)
+# Predict classes on the validation set
+y_val_pred = mlp.predict(X_val)
 
-def normalize(X, indices, mins, maxs):
-    X_norm = X.copy()
-    X_norm[:, indices] = (X_norm[:, indices] - mins) / (maxs - mins + 1e-8)
-    return X_norm
+# Evaluate the model
+accuracy = accuracy_score(y_val, y_val_pred)
+print("Validation Accuracy:", accuracy)
 
-X_train_norm = normalize(X_train_np, numerical_indices, mins, maxs)
-X_test_norm = normalize(X_test_np, numerical_indices, mins, maxs)
+print("\nClassification Report (Validation Set):")
+print(classification_report(y_val, y_val_pred))
 
-# Define the model
-input_size = X_train_norm.shape[1]
-model = MLP(input_size, [32, 16, 1])
+print("Confusion Matrix (Validation Set):")
+print(confusion_matrix(y_val, y_val_pred))
 
-# Define the loss function
-def binary_cross_entropy(y_pred, y_true):
-    loss = - (y_true * y_pred.log() + (1 - y_true) * (1 - y_pred).log())
-    return loss
+# ROC AUC Score
+roc_auc = roc_auc_score(y_val, y_val_pred_proba)
+print("ROC AUC Score (Validation Set):", roc_auc)
 
-# Training loop
-epochs = 100
-learning_rate = 0.02
+# Plot ROC Curve
+fpr, tpr, thresholds = roc_curve(y_val, y_val_pred_proba)
+plt.figure()
+plt.plot(fpr, tpr, label='MLP Classifier (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], 'k--')  # Random guessing
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic - Validation Set')
+plt.legend(loc="lower right")
+plt.show()
 
-for epoch in range(epochs):
-    total_loss = 0
-    for x, y_true in zip(X_train_norm, y_train):
-        model.zero_grad()                           # Reset gradients
-        x_values = [Value(xi) for xi in x]          # Convert inputs to list of Value objects
-        y_pred = model(x_values)                    # Forward pass
-        y_pred = y_pred.sigmoid()                   # Apply sigmoid activation
-        loss = binary_cross_entropy(y_pred, y_true) # Compute loss
-        total_loss += loss.data
-        loss.backward()                             # Backward pass
-        for p in model.parameters():                # Update parameters
-            p.data -= learning_rate * p.grad
-    avg_loss = total_loss / len(X_train_norm)
-    print(f"Epoch {epoch+1}, Loss: {avg_loss}")
+# Evaluate on the test set
+y_test_pred_proba = mlp.predict_proba(X_test)[:, 1]
+y_test_pred = mlp.predict(X_test)
 
-# Evaluation on test data
-correct = 0
-for x, y_true in zip(X_test_norm, y_test):
-    x_values = [Value(xi) for xi in x]
-    y_pred = model(x_values)
-    y_pred = y_pred.sigmoid()
-    y_pred_value = y_pred.data
-    y_pred_class = 1 if y_pred_value > 0.5 else 0
-    if y_pred_class == y_true:
-        correct += 1
-accuracy = correct / len(X_test_norm)
-print(f"Test Accuracy: {accuracy * 100:.2f}%")
+test_accuracy = accuracy_score(y_test, y_test_pred)
+print("\nTest Accuracy:", test_accuracy)
+
+print("\nClassification Report (Test Set):")
+print(classification_report(y_test, y_test_pred))
+
+print("Confusion Matrix (Test Set):")
+print(confusion_matrix(y_test, y_test_pred))
+
+# ROC AUC Score for Test Set
+roc_auc_test = roc_auc_score(y_test, y_test_pred_proba)
+print("ROC AUC Score (Test Set):", roc_auc_test)
+
+# Baseline Accuracy
+baseline_accuracy = y_test.value_counts(normalize=True).max()
+print("\nBaseline Accuracy (Guessing the majority class):", baseline_accuracy)

@@ -1,44 +1,38 @@
 import pandas as pd
 
-def data2df(file_name='Employee_Attrition.csv'):
+def parse_csv(file_path):
     """
-    Reads the Employee_Attrition.csv file and returns it as a pandas DataFrame.
+    Parses the CSV file, normalizes numerical data, and one-hot encodes categorical variables.
+
+    Parameters:
+    - file_path: str, path to the CSV file.
+
+    Returns:
+    - X_processed: pandas DataFrame, processed feature data.
+    - y_encoded: pandas Series, encoded target variable.
     """
-    try:
-        df = pd.read_csv(file_name)
-        return df
-    except FileNotFoundError:
-        print(f"Error: The file '{file_name}' does not exist in the current directory.")
-        return None
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+    # Read the CSV file into a DataFrame
+    df = pd.read_csv(file_path)
+    
+    columns_to_drop_1 = ['EmployeeCount', 'Over18', 'StandardHours', 'EmployeeNumber']
+    columns_to_drop_2 = ['MonthlyIncome', 'TotalWorkingYears', 'YearsInCurrentRole', 'YearsWithCurrManager']
+    df = df.drop(columns=columns_to_drop_1)
+    df = df.drop(columns=columns_to_drop_2)
 
-def transform_columns(df):
-    """
-    Transforms specific columns in the DataFrame:
-    - Moves 'Attrition' to the rightmost column and encodes it into binary (No -> 0, Yes -> 1).
-    - Applies one-hot encoding to categorical variables.
-    """
-    if df is None:
-        print("The DataFrame is None. Transformation skipped.")
-        return None
+    # Separate features and target variable
+    X = df.drop('Attrition', axis=1)
+    y = df['Attrition']
 
-    try:
-        # Encode 'Attrition' into binary (No -> 0, Yes -> 1)
-        df['Attrition'] = df['Attrition'].map({'No': 0, 'Yes': 1})
+    # Identify categorical and numerical columns
+    categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
+    numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
 
-        # Identify categorical variables to be one-hot encoded
-        categorical_columns = ['BusinessTravel', 'EducationField', 'Gender', 'MaritalStatus']
+    # One-hot encode categorical variables
+    X_encoded = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
 
-        # Apply one-hot encoding using pandas get_dummies
-        df = pd.get_dummies(df, columns=categorical_columns, drop_first=False)
+    # Doesn't normalize. Leave normalization until after splitting.
+    
+    # Encode the target variable
+    y_encoded = y.map({'Yes': 1, 'No': 0})
 
-        # Move 'Attrition' to the rightmost column
-        columns = [col for col in df.columns if col != 'Attrition'] + ['Attrition']
-        df = df[columns]
-
-        return df
-    except Exception as e:
-        print(f"An error occurred during transformation: {e}")
-        return None
+    return X_encoded, y_encoded
